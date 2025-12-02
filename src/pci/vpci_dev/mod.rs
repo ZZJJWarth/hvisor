@@ -17,6 +17,7 @@ pub enum VpciDevType {
     #[default]
     Physical=0,
     StandardVdev=1,
+    VirtioRng=2,
     // Add new device types here
 }
 

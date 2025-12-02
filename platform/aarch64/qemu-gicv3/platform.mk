@@ -13,6 +13,8 @@ zone0_kernel := $(image_dir)/kernel/Image
 QEMU_ARGS += -global arm-smmuv3.stage=2
 
 QEMU_ARGS += -cpu cortex-a72
+# QEMU_ARGS += -cpu neoverse-n2
+# QEMU_ARGS += -cpu max
 QEMU_ARGS += -smp 4
 QEMU_ARGS += -m 2G
 QEMU_ARGS += -nographic
@@ -38,8 +40,10 @@ QEMU_ARGS += -device virtio-net-pci,netdev=net1,disable-legacy=on,disable-modern
 
 # QEMU_ARGS += -device pci-testdev
 
-QEMU_ARGS += -netdev type=user,id=net2
-QEMU_ARGS += -device virtio-net-pci,netdev=net2,disable-legacy=on,disable-modern=off,iommu_platform=on
+# QEMU_ARGS += -netdev type=user,id=net2
+# QEMU_ARGS += -device virtio-net-pci,netdev=net2,disable-legacy=on,disable-modern=off,iommu_platform=on
 
-QEMU_ARGS += -netdev type=user,id=net3
-QEMU_ARGS += -device virtio-net-pci,netdev=net3,disable-legacy=on,disable-modern=off,iommu_platform=on
+# QEMU_ARGS += -netdev type=user,id=net3
+# QEMU_ARGS += -device virtio-net-pci,netdev=net3,disable-legacy=on,disable-modern=off,iommu_platform=on
+QEMU_ARGS += -device virtio-rng-pci,rng=rng0 -object rng-random,id=rng0,filename=/dev/urandom
+QEMU_ARGS += -device pci-testdev
