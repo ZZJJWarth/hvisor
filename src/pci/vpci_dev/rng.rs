@@ -4,45 +4,92 @@ use crate::pci::pci_access::EndpointField;
 use crate::pci::PciConfigAddress;
 use super::{PciConfigAccessStatus, VpciDeviceHandler};
 
-const VIRTIO_RNG_VENDOR_ID: u16 = 0x110a;
-const VIRTIO_RNG_DEVICE_ID: u16 = 0x4106;
-const PCI_STS_CAPS: u16 = 0x10; // bit 4
+const VIRTIO_RNG_VENDOR_ID: u16 = 0x1af4;
+const VIRTIO_RNG_DEVICE_ID: u16 = 0x1044;
+const PCI_STS_CAPS: u16 = 0x0010; // bit 4
+const RNG_REVISION: u8 = 0x01; 
 const PCI_DEV_CLASS_OTHER: u8 = 0xff;
 const PCI_CFG_CAPS: usize = 0x34;
 const PCI_CAP_ID_VNDR: u8 = 0x09;
 const PCI_CAP_ID_MSIX: u8 = 0x11;
-const STANDARD_CFG_VNDR_CAP: u8 = 0x40;
-const STANDARD_CFG_VNDR_LEN: u8 = 0x20;
-const STANDARD_CFG_MSIX_CAP: usize = 0x60; // VNDR_CAP + VNDR_LEN
-const STANDARD_MSIX_VECTORS: u16 = 16;
-const STANDARD_CFG_SIZE: usize = 0x80;
+const RNG_CFG_VNDR_CAP: u8 = 0x98;
+const CAP_UNKONWN_POS:u8 = 0x84;
+const CAP_UNKONWN_ID:u8 = 0x09;
+const CAP_UNKONWN_U16:u16 = 0x0514;
+const CAP_NOTIFY_POS:u8 = 0x70;
+const CAP_NOTIFY_ID:u8 = 0x09;
+const CAP_NOTIFY_U16:u16 = 0x0214;
+const CAP_DEVICECFG_POS:u8 = 0x60;
+const CAP_DEVICECFG_U16:u16 = 0x0410;
+const CAP_DEVICECFG_ID:u8 = 0x09;
+const CAP_ISR_POS:u8 = 0x50;
+const CAP_ISR_U16:u16 = 0x0310;
+const CAP_ISR_ID:u8 = 0x09;
+const CAP_COMMONCFG_POS:u8 = 0x40;
+const CAP_COMMONCFG_U16:u16 = 0x0110;
+const CAP_COMMONCFG_ID:u8 = 0x09;
+const CAP_MSIX_POS:u8 = 0x98;
+const CAP_MSIX_ID:u8 = 0x11;
+const CAP_MSIX_MSGCON:u16 = 8001;
+// const STANDARD_CFG_VNDR_LEN: u8 = 0x20;
+// const STANDARD_CFG_MSIX_CAP: usize = 0x60; // VNDR_CAP + VNDR_LEN
+// const STANDARD_MSIX_VECTORS: u16 = 16;
+const RNG_CFG_SIZE: usize = 0x100;
 
-pub(crate) const DEFAULT_CSPACE_U32: [u32; STANDARD_CFG_SIZE / 4] = {
-    let mut arr = [0u32; STANDARD_CFG_SIZE / 4];
-    arr[0x00 / 4] = (STANDARD_DEVICE_ID as u32) << 16 | STANDARD_VENDOR_ID as u32;
+pub(crate) const DEFAULT_CSPACE_U32: [u32; RNG_CFG_SIZE / 4] = {
+    let mut arr = [0u32; RNG_CFG_SIZE / 4];
+    // DEVICE ID ----- VENDOR ID
+    arr[0x00 / 4] = (VIRTIO_RNG_DEVICE_ID as u32) << 16 | VIRTIO_RNG_VENDOR_ID as u32;
+    // Status ------ Command
     arr[0x04 / 4] = (PCI_STS_CAPS as u32) << 16;
-    arr[0x08 / 4] = (PCI_DEV_CLASS_OTHER as u32) << 24;
-    arr[0x2c / 4] = (STANDARD_DEVICE_ID as u32) << 16 | STANDARD_VENDOR_ID as u32;
-    arr[PCI_CFG_CAPS / 4] = STANDARD_CFG_VNDR_CAP as u32;
-    arr[STANDARD_CFG_VNDR_CAP as usize / 4] = (STANDARD_CFG_VNDR_LEN as u32) << 16
-        | (STANDARD_CFG_MSIX_CAP as u32) << 8
-        | PCI_CAP_ID_VNDR as u32;
-    arr[STANDARD_CFG_MSIX_CAP / 4] = (0x00u32) << 8 | PCI_CAP_ID_MSIX as u32;
-    arr[(STANDARD_CFG_MSIX_CAP + 0x4) / 4] = 1;
-    arr[(STANDARD_CFG_MSIX_CAP + 0x8) / 4] = ((0x10 * STANDARD_MSIX_VECTORS) as u32) | 1;
+    // Class ----- Revision ID
+    arr[0x08 / 4] = (PCI_DEV_CLASS_OTHER as u32) << 24 | (RNG_REVISION as u32);
+    // Subsystem ID ----- Subsystem vendor ID
+    arr[0x2c / 4] = (VIRTIO_RNG_DEVICE_ID as u32) << 16 | VIRTIO_RNG_VENDOR_ID as u32;
+    // capability pointer = 0x98
+    arr[PCI_CFG_CAPS / 4] = CAP_MSIX_POS as u32;
+    // capability 0 = {id = MSIX;next_ptr = 0x84} 
+    arr[CAP_MSIX_POS as usize / 4] = (CAP_MSIX_MSGCON as u32) << 16
+        | (CAP_UNKONWN_POS as u32) << 8
+        | CAP_MSIX_ID as u32;
+    // capability 1 = {id = UNKONWN;next_ptr = 0x70}
+    arr[CAP_UNKONWN_POS as usize / 4] = (CAP_UNKONWN_U16 as u32) << 16
+        | (CAP_NOTIFY_POS as u32) << 8
+        | (CAP_UNKONWN_ID as u32);
+    // capability 2 = {id = NOTIFY;next_ptr = 0x60}
+    arr[CAP_NOTIFY_POS as usize / 4] = (CAP_NOTIFY_U16 as u32) << 16
+        | (CAP_DEVICECFG_POS as u32) << 8
+        | (CAP_NOTIFY_ID as u32);
+    // capability 3 = {id = DEVICECFG;next_ptr = 0x50}
+    arr[CAP_DEVICECFG_POS as usize / 4] = (CAP_DEVICECFG_U16 as u32) << 16
+        | (CAP_ISR_POS as u32) << 8
+        | (CAP_DEVICECFG_ID as u32);
+    // capability 4 = {id = ISR;next_ptr = 0x40}
+    arr[CAP_ISR_POS as usize / 4] = (CAP_ISR_U16 as u32) << 16
+        | (CAP_COMMONCFG_POS as u32) << 8
+        | (CAP_ISR_ID as u32);
+    // capability 5 = {id = COMMONCFG;next_ptr = 0x0}
+    arr[CAP_COMMONCFG_POS as usize / 4] = (CAP_COMMONCFG_U16 as u32) << 16
+        | (0x0) << 8
+        | (CAP_COMMONCFG_ID as u32); 
+    // arr[STANDARD_CFG_MSIX_CAP / 4] = (0x00u32) << 8 | PCI_CAP_ID_MSIX as u32;
+    // arr[(STANDARD_CFG_MSIX_CAP + 0x4) / 4] = 1;
+    // arr[(STANDARD_CFG_MSIX_CAP + 0x8) / 4] = ((0x10 * STANDARD_MSIX_VECTORS) as u32) | 1;
     arr
 };
 
 /// Handler for standard virtual PCI devices
-pub struct StandardHandler;
+pub struct VirtioRngHandler;
 
-impl VpciDeviceHandler for StandardHandler {
+impl VpciDeviceHandler for VirtioRngHandler {
     fn read_cfg(&self, _space: &mut PciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
         info!("virt pci standard read_cfg, offset {:#x}, size {:#x}", offset, size);
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
-                
                 Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::ID) as usize))
+            }
+            EndpointField::CapabilityPointer =>{
+                Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::CapabilityPointer) as usize))
             }
             _ => {
                 Ok(PciConfigAccessStatus::Perform)
@@ -75,12 +122,12 @@ impl VpciDeviceHandler for StandardHandler {
             offset += 4;
         }
         
-        // Example: update vendor ID
-        space.set(EndpointField::ID, 0x12345678);
+        // // Example: update vendor ID
+        // space.set(EndpointField::ID, 0x12345678);
         
         space
     }
 }
 
 /// Static handler instance for standard virtual PCI devices
-pub const HANDLER: StandardHandler = StandardHandler;
+pub const HANDLER: VirtioRngHandler = VirtioRngHandler;

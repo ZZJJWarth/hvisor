@@ -3,6 +3,7 @@ use crate::pci::PciConfigAddress;
 use crate::error::HvResult;
 
 pub mod standard;
+pub mod rng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PciConfigAccessStatus {
@@ -35,6 +36,7 @@ pub trait VpciDeviceHandler: Sync + Send {
  */
 static HANDLERS: &[(&dyn VpciDeviceHandler, VpciDevType)] = &[
     (&standard::HANDLER, VpciDevType::StandardVdev),
+    (&rng::VirtioRngHandler,VpciDevType::VirtioRng),
 ];
 
 pub(crate) fn get_handler(dev_type: VpciDevType) -> Option<&'static dyn VpciDeviceHandler> {
