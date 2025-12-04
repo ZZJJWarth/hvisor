@@ -385,7 +385,7 @@ impl VirtualPciConfigSpace {
         match self.get_config_type() {
             HeaderType::Endpoint => {
                 match EndpointField::from(offset as usize, size) {
-                    EndpointField::Bar => {
+                    EndpointField::Bar0 => {
                         // let updating_range = offset as usize..offset as usize+ size;
                         // let bytes = &value.to_le_bytes()[..size];
                         // info!("[{:x}-{:x}] bytes {:#?} \n{:x}", updating_range.start, updating_range.end, bytes, value);
@@ -416,23 +416,25 @@ impl VirtualPciConfigSpace {
     pub fn virt_dev(
         bdf: Bdf,
         base: PciConfigAddress,
+        dev_type: VpciDevType,
+        vbdf: Bdf
     ) -> Self {
         Self {
             host_bdf: Bdf::default(),
             parent_bdf: Bdf::default(),
             bdf,
-            vbdf: Bdf::default(),
+            vbdf,
             config_type: HeaderType::Endpoint,
             class: (0u8,0u8,0u8),
             base,
-            space: PciConfigSpace::init_with_type(VpciDevType::StandardVdev),
+            space: PciConfigSpace::init_with_type(dev_type),
             control: VirtualPciConfigControl::virt_dev(),
             access: VirtualPciAccessBits::virt_dev(),
             backend: Arc::new(EndpointHeader::new_with_region(PciConfigMmio::new(base, CONFIG_LENTH))),
             bararr: Bar::default(),
             rom: PciMem::default(),
             capabilities: PciCapabilityList::new(),
-            dev_type: VpciDevType::StandardVdev,
+            dev_type,
         }
     }
     pub fn endpoint(
@@ -1115,7 +1117,10 @@ impl VirtualRootComplex {
         bdf: Bdf,
         dev: VirtualPciConfigSpace,
     ) -> Option<VirtualPciConfigSpace> {
+        
         let base = dev.get_base();
+        // info!("insert vpci dev: base = 0x{:x}-->{}:{}:{}",base,bdf.bus(),bdf.device(),bdf.function());
+        // info!("inser devs:bdf---->{}:{}:{}",dev.bdf.bus(),dev.bdf.device(),dev.bdf.function());
         self.base_to_bdf.insert(base, bdf);
         self.devs.insert(bdf, dev)
     }
@@ -1138,6 +1143,7 @@ impl VirtualRootComplex {
         base: PciConfigAddress,
     ) -> Option<&mut VirtualPciConfigSpace> {
         let bdf = self.base_to_bdf.get(&base).copied()?;
+        // info!("get bdf: 0x{:x}-->{}:{}.{}",base,bdf.bus(),bdf.device(),bdf.function());
         self.devs.get_mut(&bdf)
     }
 }

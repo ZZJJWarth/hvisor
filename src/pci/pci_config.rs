@@ -169,6 +169,7 @@ impl Zone {
                 #[cfg(feature = "ecam_pcie")]
                 {
                     let dev_type = dev_config.dev_type;
+                    info!("get dev type:{:?}",dev_type);
                     match dev_type {
                     VpciDevType::Physical => {
                         warn!("can not find dev {:#?}", bdf);
@@ -179,7 +180,8 @@ impl Zone {
                                             + ((bdf.bus() as u64) << 20)
                                             + ((bdf.device() as u64) << 15)
                                             + ((bdf.function() as u64) << 12);
-                            let dev = VirtualPciConfigSpace::virt_dev(bdf, base);
+                            // info!("114514:base is 0x{:x}",base);
+                            let dev = VirtualPciConfigSpace::virt_dev(bdf, base,dev_type,vbdf);
                             self.vpci_bus.insert(vbdf, dev);
                         } else {
                             warn!("can not find dev {:#?}, unknown device type", bdf);

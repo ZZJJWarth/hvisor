@@ -36,7 +36,7 @@ pub trait VpciDeviceHandler: Sync + Send {
  */
 static HANDLERS: &[(&dyn VpciDeviceHandler, VpciDevType)] = &[
     (&standard::HANDLER, VpciDevType::StandardVdev),
-    (&rng::VirtioRngHandler,VpciDevType::VirtioRng),
+    (&rng::HANDLER,VpciDevType::VirtioRng),
 ];
 
 pub(crate) fn get_handler(dev_type: VpciDevType) -> Option<&'static dyn VpciDeviceHandler> {

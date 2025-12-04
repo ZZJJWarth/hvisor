@@ -46,4 +46,4 @@ QEMU_ARGS += -device virtio-net-pci,netdev=net1,disable-legacy=on,disable-modern
 # QEMU_ARGS += -netdev type=user,id=net3
 # QEMU_ARGS += -device virtio-net-pci,netdev=net3,disable-legacy=on,disable-modern=off,iommu_platform=on
 QEMU_ARGS += -device virtio-rng-pci,disable-legacy=on,rng=rng0 -object rng-random,id=rng0,filename=/dev/urandom
-QEMU_ARGS += -device pci-testdev
+# QEMU_ARGS += -device pci-testdev

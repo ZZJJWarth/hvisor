@@ -3,12 +3,48 @@ use crate::pci::pci_struct::PciConfigSpace;
 use crate::pci::pci_access::EndpointField;
 use crate::pci::PciConfigAddress;
 use super::{PciConfigAccessStatus, VpciDeviceHandler};
+/*
+0000000 1af4 1044 0406 0010 0001 00ff 0008 0000
+0000010 0000 0000 1000 1004 0000 0000 0000 0000
+0000020 400c 0000 0080 0000 0000 0000 0000 0000
+0000030 0000 0000 0098 0000 0000 0000 0127 0000
+0000040 0009 0110 0004 0000 0000 0000 1000 0000
+0000050 4009 0310 0004 0000 1000 0000 1000 0000
+0000060 5009 0410 0004 0000 2000 0000 1000 0000
+0000070 6009 0214 0004 0000 3000 0000 1000 0000
+0000080 0004 0000 7009 0514 0000 0000 0000 0000
+0000090 0000 0000 0000 0000 8411 8001 0001 0000
+00000a0 0801 0000 0000 0000 0000 0000 0000 0000
+00000b0 0000 0000 0000 0000 0000 0000 0000 0000
+*
+0000100
+
+*/
+
+pub(crate) const COPY_CSPACE_U32: [u16; 0x200 / 4] = [
+    0x1af4,0x1044,0x0406,0x0010,0x0001,0x00ff,0x0008,0x0000,
+    0x0000,0x0000,0x1000,0x1004,0x0000,0x0000,0x0000,0x0000,
+    0x400c,0x0000,0x0080,0x0000,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0098,0x0000,0x0000,0x0000,0x0127,0x0000,
+    0x0009,0x0110,0x0004,0x0000,0x0000,0x0000,0x1000,0x0000,
+    0x4009,0x0310,0x0004,0x0000,0x1000,0x0000,0x1000,0x0000,
+    0x5009,0x0410,0x0004,0x0000,0x2000,0x0000,0x1000,0x0000,
+    0x6009,0x0214,0x0004,0x0000,0x3000,0x0000,0x1000,0x0000,
+    0x0004,0x0000,0x7009,0x0514,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0000,0x0000,0x8411,0x8001,0x0001,0x0000,
+    0x0801,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
+    0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
+    ];
 
 const VIRTIO_RNG_VENDOR_ID: u16 = 0x1af4;
 const VIRTIO_RNG_DEVICE_ID: u16 = 0x1044;
 const PCI_STS_CAPS: u16 = 0x0010; // bit 4
 const RNG_REVISION: u8 = 0x01; 
-const PCI_DEV_CLASS_OTHER: u8 = 0xff;
+const PCI_DEV_CLASS_OTHER: u32 = 0x00ff0000;
 const PCI_CFG_CAPS: usize = 0x34;
 const PCI_CAP_ID_VNDR: u8 = 0x09;
 const PCI_CAP_ID_MSIX: u8 = 0x11;
@@ -43,7 +79,7 @@ pub(crate) const DEFAULT_CSPACE_U32: [u32; RNG_CFG_SIZE / 4] = {
     // Status ------ Command
     arr[0x04 / 4] = (PCI_STS_CAPS as u32) << 16;
     // Class ----- Revision ID
-    arr[0x08 / 4] = (PCI_DEV_CLASS_OTHER as u32) << 24 | (RNG_REVISION as u32);
+    arr[0x08 / 4] = PCI_DEV_CLASS_OTHER | (RNG_REVISION as u32);
     // Subsystem ID ----- Subsystem vendor ID
     arr[0x2c / 4] = (VIRTIO_RNG_DEVICE_ID as u32) << 16 | VIRTIO_RNG_VENDOR_ID as u32;
     // capability pointer = 0x98
@@ -83,7 +119,7 @@ pub struct VirtioRngHandler;
 
 impl VpciDeviceHandler for VirtioRngHandler {
     fn read_cfg(&self, _space: &mut PciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
-        info!("virt pci standard read_cfg, offset {:#x}, size {:#x}", offset, size);
+        // info!("virt pci standard read_cfg, offset {:#x}, size {:#x}", offset, size);
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
                 Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::ID) as usize))
@@ -98,7 +134,7 @@ impl VpciDeviceHandler for VirtioRngHandler {
     }
 
     fn write_cfg(&self, space: &mut PciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
-        info!("virt pci standard write_cfg, offset {:#x}, size {:#x}, value {:#x}", offset, size, value);
+        // info!("virt pci standard write_cfg, offset {:#x}, size {:#x}, value {:#x}", offset, size, value);
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
                 Ok(PciConfigAccessStatus::Reject)
@@ -107,19 +143,68 @@ impl VpciDeviceHandler for VirtioRngHandler {
                 space.set(EndpointField::Command, value as u32);
                 Ok(PciConfigAccessStatus::Done(value))
             }
+            EndpointField::Bar0=>{
+                if(value == 0xffff_ffff){
+                    space.set(EndpointField::Bar0, 0xffff_f000);
+                    Ok(PciConfigAccessStatus::Done(value))
+                }else{
+                    Ok(PciConfigAccessStatus::Perform)
+                }
+            }
+            EndpointField::Bar1=>{
+                if(value == 0xffff_ffff){
+                    space.set(EndpointField::Bar1, 0xffff_f000);
+                    Ok(PciConfigAccessStatus::Done(value))
+                }else{
+                    Ok(PciConfigAccessStatus::Perform)
+                }
+            }
+            EndpointField::Bar2=>{
+                if(value == 0xffff_ffff){
+                    space.set(EndpointField::Bar2, 0xffff_f000);
+                    Ok(PciConfigAccessStatus::Done(value))
+                }else{
+                    Ok(PciConfigAccessStatus::Perform)
+                }
+            }
+            EndpointField::Bar3=>{
+                if(value == 0xffff_ffff){
+                    space.set(EndpointField::Bar3, 0xffff_f000);
+                    Ok(PciConfigAccessStatus::Done(value))
+                }else{
+                    Ok(PciConfigAccessStatus::Perform)
+                }
+            }
+            EndpointField::Bar4=>{
+                if(value == 0xffff_ffff){
+                    space.set(EndpointField::Bar4, 0xffff_c000);
+                    Ok(PciConfigAccessStatus::Done(value))
+                }else{
+                    Ok(PciConfigAccessStatus::Perform)
+                }
+            }
+            EndpointField::Bar5=>{
+                if(value == 0xffff_ffff){
+                    space.set(EndpointField::Bar5, 0xffff_f000);
+                    Ok(PciConfigAccessStatus::Done(value))
+                }else{
+                    Ok(PciConfigAccessStatus::Perform)
+                }
+            }
             _ => {
-                Ok(PciConfigAccessStatus::Reject)
+                Ok(PciConfigAccessStatus::Perform)
             }
         }
     }
 
     fn init_config_space(&self) -> PciConfigSpace {
         let mut space = PciConfigSpace::new();
-        let default_cspace = DEFAULT_CSPACE_U32;
+        // let default_cspace = DEFAULT_CSPACE_U32;
+        let default_cspace = COPY_CSPACE_U32;
         let mut offset = 0;
         for &value in &default_cspace {
-            space.get_range_mut(offset, 4).copy_from_slice(&value.to_le_bytes());
-            offset += 4;
+            space.get_range_mut(offset, 2).copy_from_slice(&value.to_le_bytes());
+            offset += 2;
         }
         
         // // Example: update vendor ID
