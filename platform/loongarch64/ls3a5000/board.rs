@@ -157,8 +157,6 @@ pub const ROOT_ZONE_IVC_CONFIG: [HvIvcConfig; 0] = [];
 
 pub const ROOT_PCI_CONFIG: [HvPciConfig; 1] = [
     HvPciConfig {
-        bus_range_begin: 0x0,
-        bus_range_end: 0x1f,
         ecam_base: 0xfe00000000,
         ecam_size: 0x20000000,
         io_base: 0x18408000,
@@ -170,6 +168,8 @@ pub const ROOT_PCI_CONFIG: [HvPciConfig; 1] = [
         mem64_base: 0x60000000,
         mem64_size: 0x20000000,
         pci_mem64_base: 0x60000000,
+        bus_range_begin: 0,
+        bus_range_end: 0xff,
     }
 ];
 

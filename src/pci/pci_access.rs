@@ -40,6 +40,8 @@ use crate::{
     zone::{this_zone_id, Zone},
 };
 
+use crate::pci::vpci_dev::VpciDevType;
+
 pub type VendorId = u16;
 pub type DeviceId = u16;
 pub type DeviceRevision = u8;
@@ -180,6 +182,10 @@ impl PciMem {
             prefetchable: false,
             size_read: false,
         }
+    }
+
+    pub fn set_size(&mut self, size: u64){
+        self.size = size;
     }
 
     pub fn get_size(&self) -> u64 {
@@ -653,6 +659,12 @@ pub trait PciBarRW: PciRWBase {
         // println!("write bar slot {} {}", slot, value);
         self.backend()
             .write_u32((0x10 + (slot as u16) * 4) as PciConfigAddress, value)
+    }
+}
+
+impl Bar {
+    pub fn virt_bar_init(dev_type: VpciDevType) -> Self {
+        crate::pci::vpci_dev::virt_bar_init(dev_type)
     }
 }
 
@@ -1201,10 +1213,10 @@ fn handle_config_space_access(
     let value = mmio.value;
     let is_write = mmio.is_write;
     let vbdf = dev.get_vbdf();
-    // info!("dev type:{:?}----bdf:{:#x}-----vbdf:{:#x}",dev.get_dev_type(),dev.get_bdf().device(),vbdf.device());
-    if vbdf.bus == 0 && vbdf.device == 5 && vbdf.function == 0 {
-        info!("virt pci standard access, vbdf {:#?}, offset {:#x}, size {:#x}, is_write {:#?}", vbdf, offset, size, is_write);
-    }
+
+    // if vbdf.bus == 0 && vbdf.device == 5 && vbdf.function == 0 {
+    //     info!("virt pci standard access, vbdf {:#?}, offset {:#x}, size {:#x}, is_write {:#?}", vbdf, offset, size, is_write);
+    // }
 
     if (offset as usize) >= BIT_LENTH {
         warn!("invalid pci offset {:#x}", offset);
@@ -1216,7 +1228,7 @@ fn handle_config_space_access(
 
     match dev.access(offset, size) {
         false => {
-            debug!(
+            info!(
                 "hw vbdf {:#?} reg 0x{:x} try {} {}",
                 vbdf,
                 offset,
@@ -1307,7 +1319,7 @@ fn handle_config_space_access(
                                                         );
                                                     }
                                                     let paddr = bar.get_value64();
-                                                    debug!(
+                                                    info!(
                                                         "old_vaddr {:x} new_vaddr {:x} paddr {:x}",
                                                         old_vaddr, new_vaddr, paddr
                                                     );
@@ -1362,7 +1374,11 @@ fn handle_config_space_access(
                                                 dev.clear_bar_size_read(slot);
                                                 r
                                             } else {
-                                                bar.get_virtual_value().try_into().unwrap()
+                                                // bar.get_virtual_value().try_into().unwrap()
+                                                let emu_value = dev.read_emu(offset, size).unwrap() as usize;
+                                                let virtual_value = bar.get_virtual_value() as usize;
+                                                info!("emu value {:#x} virtual_value {:#x}", emu_value, virtual_value);
+                                                emu_value
                                             };
                                         }
                                     } else {
@@ -1410,7 +1426,7 @@ fn handle_config_space_access(
         }
     }
 
-    debug!(
+    info!(
         "vbdf {:#?} reg 0x{:x} {} 0x{:x}",
         vbdf,
         offset,

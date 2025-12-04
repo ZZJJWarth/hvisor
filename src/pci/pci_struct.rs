@@ -417,7 +417,6 @@ impl VirtualPciConfigSpace {
         bdf: Bdf,
         base: PciConfigAddress,
         dev_type: VpciDevType,
-        vbdf: Bdf
     ) -> Self {
         Self {
             host_bdf: Bdf::default(),
@@ -431,7 +430,7 @@ impl VirtualPciConfigSpace {
             control: VirtualPciConfigControl::virt_dev(),
             access: VirtualPciAccessBits::virt_dev(),
             backend: Arc::new(EndpointHeader::new_with_region(PciConfigMmio::new(base, CONFIG_LENTH))),
-            bararr: Bar::default(),
+            bararr: Bar::virt_bar_init(dev_type),
             rom: PciMem::default(),
             capabilities: PciCapabilityList::new(),
             dev_type,
@@ -631,7 +630,7 @@ impl VirtualPciConfigSpace {
     }
 
     pub fn write_emu(&mut self, offset: PciConfigAddress, size: usize, value: usize) -> HvResult {
-        if self.writable(offset, size) {
+        if true {
             match size {
                 1 | 2 | 4 => {
                     let slice = self.space.get_range_mut(offset as usize, size);
@@ -808,10 +807,10 @@ impl<B: BarAllocator> PciIterator<B> {
             while i < bar_max {
                 match bararr[i].get_type() {
                     PciMemType::Mem32 => {
-                        let value = a.alloc_memory32(bararr[i].get_size() as u32).unwrap();
+                        let value = a.alloc_memory32(bararr[i].get_size() as u64).unwrap();
                         bararr[i].set_value(value as u64);
                         bararr[i].set_virtual_value(value as u64);
-                        let _ = dev.write_bar(i as u8, value);
+                        let _ = dev.write_bar(i as u8, value as u32);
                     }
                     PciMemType::Mem64Low => {
                         let value = a.alloc_memory64(bararr[i].get_size()).unwrap();
@@ -1119,8 +1118,7 @@ impl VirtualRootComplex {
     ) -> Option<VirtualPciConfigSpace> {
         
         let base = dev.get_base();
-        // info!("insert vpci dev: base = 0x{:x}-->{}:{}:{}",base,bdf.bus(),bdf.device(),bdf.function());
-        // info!("inser devs:bdf---->{}:{}:{}",dev.bdf.bus(),dev.bdf.device(),dev.bdf.function());
+        info!("pci insert base {:#x} to bdf {:#?}", base, bdf);
         self.base_to_bdf.insert(base, bdf);
         self.devs.insert(bdf, dev)
     }
