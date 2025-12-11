@@ -151,6 +151,11 @@ impl PciMem {
         }
     }
 
+    pub fn config_bar(&mut self,bar_type: PciMemType,prefetchable: bool){
+        self.bar_type = bar_type;
+        self.prefetchable = prefetchable;
+    }
+
     pub fn new_io(value: u64, size: u64) -> Self {
         Self {
             bar_type: PciMemType::Io,
@@ -778,12 +783,7 @@ pub enum EndpointField {
     LatencyTime,
     HeaderType,
     Bist,
-    Bar0,
-    Bar1,
-    Bar2,
-    Bar3,
-    Bar4,
-    Bar5,
+    Bar(usize),
     CardCisPointer,
     SubsystemVendorId,
     SubsystemId,
@@ -808,12 +808,7 @@ impl Debug for EndpointField {
             EndpointField::LatencyTime => write!(f, "LatencyTime"),
             EndpointField::HeaderType => write!(f, "HeaderType"),
             EndpointField::Bist => write!(f, "Bist"),
-            EndpointField::Bar0 => write!(f, "Bar0"),
-            EndpointField::Bar1 => write!(f, "Bar1"),
-            EndpointField::Bar2 => write!(f, "Bar2"),
-            EndpointField::Bar3 => write!(f, "Bar3"),
-            EndpointField::Bar4 => write!(f, "Bar4"),
-            EndpointField::Bar5 => write!(f, "Bar5"),
+            EndpointField::Bar(slot) => write!(f, "Bar({})", slot),
             EndpointField::CardCisPointer => write!(f, "CardCisPointer"),
             EndpointField::SubsystemVendorId => write!(f, "SubsystemVendorId"),
             EndpointField::SubsystemId => write!(f, "SubsystemId"),
@@ -840,12 +835,7 @@ impl PciField for EndpointField {
             EndpointField::LatencyTime => 0x0d,
             EndpointField::HeaderType => 0x0e,
             EndpointField::Bist => 0x0f,
-            EndpointField::Bar0 => 0x10,
-            EndpointField::Bar1 => 0x14,
-            EndpointField::Bar2 => 0x18,
-            EndpointField::Bar3 => 0x1C,
-            EndpointField::Bar4 => 0x20,
-            EndpointField::Bar5 => 0x24,
+            EndpointField::Bar(slot) => (0x10 + slot * 4) as usize,
             EndpointField::CardCisPointer => 0x28,
             EndpointField::SubsystemVendorId => 0x2c,
             EndpointField::SubsystemId => 0x2e,
@@ -869,12 +859,7 @@ impl PciField for EndpointField {
             EndpointField::LatencyTime => 1,
             EndpointField::HeaderType => 1,
             EndpointField::Bist => 1,
-            EndpointField::Bar0 => 4,
-            EndpointField::Bar1 => 4,
-            EndpointField::Bar2 => 4,
-            EndpointField::Bar3 => 4,
-            EndpointField::Bar4 => 4,
-            EndpointField::Bar5 => 4,
+            EndpointField::Bar(_) => 4,
             EndpointField::CardCisPointer => 4,
             EndpointField::SubsystemVendorId => 2,
             EndpointField::SubsystemId => 2,
@@ -900,12 +885,15 @@ impl EndpointField {
             (0x0d, 1) => EndpointField::LatencyTime,
             (0x0e, 1) => EndpointField::HeaderType,
             (0x0f, 1) => EndpointField::Bist,
-            (0x10, 4) => EndpointField::Bar0,
-            (0x14, 4) => EndpointField::Bar1,
-            (0x18, 4) => EndpointField::Bar2,
-            (0x1C, 4) => EndpointField::Bar3,
-            (0x20, 4) => EndpointField::Bar4,
-            (0x24, 4) => EndpointField::Bar5,
+            // (0x10, 4) | (0x14, 4) | (0x18, 4) | (0x1c, 4) | (0x20, 4) | (0x24, 4) => {
+            //     EndpointField::Bar
+            // }
+            (0x10, 4) => EndpointField::Bar(0),
+            (0x14, 4) => EndpointField::Bar(1),
+            (0x18, 4) => EndpointField::Bar(2),
+            (0x1c, 4) => EndpointField::Bar(3),
+            (0x20, 4) => EndpointField::Bar(4),
+            (0x24, 4) => EndpointField::Bar(5),
             (0x28, 4) => EndpointField::CardCisPointer,
             (0x2c, 2) => EndpointField::SubsystemVendorId,
             (0x2e, 2) => EndpointField::SubsystemId,
@@ -1206,7 +1194,7 @@ fn handle_config_space_access(
     dev: &mut VirtualPciConfigSpace,
     mmio: &mut MMIOAccess,
     offset: PciConfigAddress,
-    gpm: &mut MemorySet<crate::arch::s2pt::Stage2PageTable>,
+    // gpm: &mut MemorySet<crate::arch::s2pt::Stage2PageTable>,
     zone_id: usize,
 ) -> HvResult {
     let size = mmio.size;
@@ -1262,9 +1250,9 @@ fn handle_config_space_access(
                     match dev.get_config_type() {
                         HeaderType::Endpoint => {
                             match EndpointField::from(offset as usize, size) {
-                                EndpointField::Bar0 | EndpointField::Bar1 | EndpointField::Bar2 | EndpointField::Bar3 |EndpointField::Bar4 |EndpointField::Bar5 => {
-
-                                    let slot = ((offset - 0x10) / 4) as usize;
+                                EndpointField::Bar(slot) => {
+                                    // let slot = ((offset - 0x10) / 4) as usize;
+                                    let slot = slot as usize;
                                     /* the write of bar needs to start from dev,
                                      * where the bar variable here is just a copy
                                      */
@@ -1426,13 +1414,13 @@ fn handle_config_space_access(
         }
     }
 
-    info!(
-        "vbdf {:#?} reg 0x{:x} {} 0x{:x}",
-        vbdf,
-        offset,
-        if is_write { "write" } else { "read" },
-        mmio.value
-    );
+    // info!(
+    //     "vbdf {:#?} reg 0x{:x} {} 0x{:x}",
+    //     vbdf,
+    //     offset,
+    //     if is_write { "write" } else { "read" },
+    //     mmio.value
+    // );
 
     Ok(())
 }
@@ -1466,7 +1454,8 @@ pub fn mmio_vpci_handler(mmio: &mut MMIOAccess, _base: usize) -> HvResult {
     let base = mmio.address as PciConfigAddress - offset + _base as PciConfigAddress;
     // info!("base is : 0x{:x}",base);
     if let Some(dev) = vbus.get_device_by_base(base) {
-        handle_config_space_access(dev, mmio, offset, gpm, zone_id)?;
+        drop(guard);
+        handle_config_space_access(dev, mmio, offset, zone_id)?;
     } else {
         handle_device_not_found(mmio, offset);
     }

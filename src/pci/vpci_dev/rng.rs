@@ -1,8 +1,13 @@
-use crate::error::HvResult;
+use crate::pci::vpci_dev::standard::mmio_vdev_standard_handler;
+use crate::percpu::this_zone;
+use crate::{error::HvResult, pci::pci_struct::VirtualPciConfigSpace};
 use crate::pci::pci_struct::PciConfigSpace;
 use crate::pci::pci_access::EndpointField;
 use crate::pci::PciConfigAddress;
 use super::{PciConfigAccessStatus, VpciDeviceHandler};
+use crate::memory::frame::Frame;
+use crate::pci::vpci_dev::Bar;
+use crate::memory::MMIOAccess;
 /*
 0000000 1af4 1044 0406 0010 0001 00ff 0008 0000
 0000010 0000 0000 1000 1004 0000 0000 0000 0000
@@ -118,14 +123,51 @@ pub(crate) const DEFAULT_CSPACE_U32: [u32; RNG_CFG_SIZE / 4] = {
 pub struct VirtioRngHandler;
 
 impl VpciDeviceHandler for VirtioRngHandler {
-    fn read_cfg(&self, _space: &mut PciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
+
+    fn init_bar(&self) -> crate::pci::pci_access::Bar {
+        let mut bar = Bar::default();
+        bar[0].set_size(0x0);
+        bar[1].set_size(0x4000);
+        bar[2].set_size(0x0);
+        bar[3].set_size(0x0);
+        bar[4].set_size(0x10000);
+        bar[5].set_size(0x0);
+
+        let frame1 = Frame::new().unwrap();
+        let frame4 = Frame::new().unwrap();
+        bar[1].set_value(frame1.start_paddr() as u64);
+        bar[4].set_value(frame4.start_paddr() as u64);
+        bar[1].config_bar(crate::pci::pci_access::PciMemType::Mem32, false);
+        bar[4].config_bar(crate::pci::pci_access::PciMemType::Mem64Low, true);
+        bar[5].config_bar(crate::pci::pci_access::PciMemType::Mem64High, true);
+        // value is the paddr of the mem you allocate
+        // let frame = Frame::new().unwrap();
+        // let start = frame.start_paddr();
+        // let size = frame.size();
+        // bar[0].set_value(start as u64);
+        // bar[0].set_virtual_value(start as u64);
+        // bar[0].set_size(size as u64);
+        info!("114514::init_bar:{:?},frame1:{:?},frame4:{:?}",bar,frame1,frame4);
+        bar
+    }
+
+    fn read_cfg(&self, _space: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
         // info!("virt pci standard read_cfg, offset {:#x}, size {:#x}", offset, size);
         match EndpointField::from(offset as usize, size) {
-            EndpointField::ID => {
-                Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::ID) as usize))
-            }
-            EndpointField::CapabilityPointer =>{
-                Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::CapabilityPointer) as usize))
+            // EndpointField::ID => {
+            //     Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::ID) as usize))
+            // }
+            // EndpointField::CapabilityPointer =>{
+            //     Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::CapabilityPointer) as usize))
+            // }
+            EndpointField::Bar(n)=>{
+                let bar = _space.get_bararr()[n];
+                // return Ok(PciConfigAccessStatus::Done(0x0));
+                if(bar.get_size_read()){
+                    return Ok(PciConfigAccessStatus::Done(bar.get_size() as usize))
+                }else{
+                    return Ok(PciConfigAccessStatus::Perform)
+                }
             }
             _ => {
                 Ok(PciConfigAccessStatus::Perform)
@@ -133,62 +175,81 @@ impl VpciDeviceHandler for VirtioRngHandler {
         }
     }
 
-    fn write_cfg(&self, space: &mut PciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
+    fn write_cfg(&self, space: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
         // info!("virt pci standard write_cfg, offset {:#x}, size {:#x}, value {:#x}", offset, size, value);
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
                 Ok(PciConfigAccessStatus::Reject)
             }
-            EndpointField::Command => {
-                space.set(EndpointField::Command, value as u32);
-                Ok(PciConfigAccessStatus::Done(value))
-            }
-            EndpointField::Bar0=>{
+            // EndpointField::Command => {
+            //     space.set(EndpointField::Command, value as u32);
+            //     Ok(PciConfigAccessStatus::Done(value))
+            // }
+            // EndpointField::Bar0=>{
+            //     if(value == 0xffff_ffff){
+            //         space.set(EndpointField::Bar0, 0xffff_f000);
+            //         Ok(PciConfigAccessStatus::Done(value))
+            //     }else{
+            //         Ok(PciConfigAccessStatus::Perform)
+            //     }
+            // }
+            // EndpointField::Bar1=>{
+            //     if(value == 0xffff_ffff){
+            //         space.set(EndpointField::Bar1, 0xffff_f000);
+            //         Ok(PciConfigAccessStatus::Done(value))
+            //     }else{
+            //         Ok(PciConfigAccessStatus::Perform)
+            //     }
+            // }
+            // EndpointField::Bar2=>{
+            //     if(value == 0xffff_ffff){
+            //         space.set(EndpointField::Bar2, 0xffff_f000);
+            //         Ok(PciConfigAccessStatus::Done(value))
+            //     }else{
+            //         Ok(PciConfigAccessStatus::Perform)
+            //     }
+            // }
+            // EndpointField::Bar3=>{
+            //     if(value == 0xffff_ffff){
+            //         space.set(EndpointField::Bar3, 0xffff_f000);
+            //         Ok(PciConfigAccessStatus::Done(value))
+            //     }else{
+            //         Ok(PciConfigAccessStatus::Perform)
+            //     }
+            // }
+            // EndpointField::Bar4=>{
+            //     if(value == 0xffff_ffff){
+            //         space.set(EndpointField::Bar4, 0xffff_c000);
+            //         Ok(PciConfigAccessStatus::Done(value))
+            //     }else{
+            //         Ok(PciConfigAccessStatus::Perform)
+            //     }
+            // }
+            // EndpointField::Bar5=>{
+            //     if(value == 0xffff_ffff){
+            //         space.set(EndpointField::Bar5, 0xffff_f000);
+            //         Ok(PciConfigAccessStatus::Done(value))
+            //     }else{
+            //         Ok(PciConfigAccessStatus::Perform)
+            //     }
+            // }
+            EndpointField::Bar(n)=>{
                 if(value == 0xffff_ffff){
-                    space.set(EndpointField::Bar0, 0xffff_f000);
-                    Ok(PciConfigAccessStatus::Done(value))
-                }else{
-                    Ok(PciConfigAccessStatus::Perform)
+                    space.set_bar_size_read(n);
+                    Ok(PciConfigAccessStatus::Done(0x0))
+                }else if value == 0x0 {
+                    Ok(PciConfigAccessStatus::Done(0x0))   
                 }
-            }
-            EndpointField::Bar1=>{
-                if(value == 0xffff_ffff){
-                    space.set(EndpointField::Bar1, 0xffff_f000);
-                    Ok(PciConfigAccessStatus::Done(value))
-                }else{
-                    Ok(PciConfigAccessStatus::Perform)
-                }
-            }
-            EndpointField::Bar2=>{
-                if(value == 0xffff_ffff){
-                    space.set(EndpointField::Bar2, 0xffff_f000);
-                    Ok(PciConfigAccessStatus::Done(value))
-                }else{
-                    Ok(PciConfigAccessStatus::Perform)
-                }
-            }
-            EndpointField::Bar3=>{
-                if(value == 0xffff_ffff){
-                    space.set(EndpointField::Bar3, 0xffff_f000);
-                    Ok(PciConfigAccessStatus::Done(value))
-                }else{
-                    Ok(PciConfigAccessStatus::Perform)
-                }
-            }
-            EndpointField::Bar4=>{
-                if(value == 0xffff_ffff){
-                    space.set(EndpointField::Bar4, 0xffff_c000);
-                    Ok(PciConfigAccessStatus::Done(value))
-                }else{
-                    Ok(PciConfigAccessStatus::Perform)
-                }
-            }
-            EndpointField::Bar5=>{
-                if(value == 0xffff_ffff){
-                    space.set(EndpointField::Bar5, 0xffff_f000);
-                    Ok(PciConfigAccessStatus::Done(value))
-                }else{
-                    Ok(PciConfigAccessStatus::Perform)
+                else{
+                    
+                    let a = space.get_bararr()[n];
+                    let mut zone = this_zone();
+                    let mut guard = zone.write();
+                    guard.mmio_region_register(value , a.get_size() as usize, rng_mmio_handler, value);
+                    drop(guard);
+                    space.clear_bar_size_read(n);
+                    
+                    Ok(PciConfigAccessStatus::Done(0x0))
                 }
             }
             _ => {
@@ -216,3 +277,9 @@ impl VpciDeviceHandler for VirtioRngHandler {
 
 /// Static handler instance for standard virtual PCI devices
 pub const HANDLER: VirtioRngHandler = VirtioRngHandler;
+
+pub fn rng_mmio_handler(mmio: &mut MMIOAccess, _base: usize) -> HvResult {
+    error!("i receive mmio!{:?}",mmio);
+    // panic!("hhh!");
+    Ok(())
+}

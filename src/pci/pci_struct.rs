@@ -385,7 +385,7 @@ impl VirtualPciConfigSpace {
         match self.get_config_type() {
             HeaderType::Endpoint => {
                 match EndpointField::from(offset as usize, size) {
-                    EndpointField::Bar0 => {
+                    EndpointField::Bar(_) => {
                         // let updating_range = offset as usize..offset as usize+ size;
                         // let bytes = &value.to_le_bytes()[..size];
                         // info!("[{:x}-{:x}] bytes {:#?} \n{:x}", updating_range.start, updating_range.end, bytes, value);
@@ -422,7 +422,7 @@ impl VirtualPciConfigSpace {
             host_bdf: Bdf::default(),
             parent_bdf: Bdf::default(),
             bdf,
-            vbdf,
+            vbdf:bdf,
             config_type: HeaderType::Endpoint,
             class: (0u8,0u8,0u8),
             base,
