@@ -1194,7 +1194,7 @@ fn handle_config_space_access(
     dev: &mut VirtualPciConfigSpace,
     mmio: &mut MMIOAccess,
     offset: PciConfigAddress,
-    // gpm: &mut MemorySet<crate::arch::s2pt::Stage2PageTable>,
+    gpm: &mut MemorySet<crate::arch::s2pt::Stage2PageTable>,
     zone_id: usize,
 ) -> HvResult {
     let size = mmio.size;
@@ -1454,8 +1454,8 @@ pub fn mmio_vpci_handler(mmio: &mut MMIOAccess, _base: usize) -> HvResult {
     let base = mmio.address as PciConfigAddress - offset + _base as PciConfigAddress;
     // info!("base is : 0x{:x}",base);
     if let Some(dev) = vbus.get_device_by_base(base) {
-        drop(guard);
-        handle_config_space_access(dev, mmio, offset, zone_id)?;
+        // drop(guard);
+        handle_config_space_access(dev, mmio, offset,gpm, zone_id)?;
     } else {
         handle_device_not_found(mmio, offset);
     }
