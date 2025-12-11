@@ -16,6 +16,7 @@
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use bit_field::BitField;
 use bitvec::{array::BitArray, order::Lsb0, BitArr};
+use spin::rwlock::RwLock;
 use core::{cmp::Ordering, fmt::Debug, ops::Range, str::FromStr};
 
 use super::{
@@ -605,7 +606,7 @@ impl VirtualPciConfigSpace {
         }
     }
 
-    pub fn read_emu(&mut self, offset: PciConfigAddress, size: usize) -> HvResult<usize> {
+    pub fn read_emu(&self, offset: PciConfigAddress, size: usize) -> HvResult<usize> {
         match size {
             1 | 2 | 4 => {
                 let slice = self.space.get_range(offset as usize, size);
@@ -1099,7 +1100,7 @@ impl RootComplex {
 
 #[derive(Debug)]
 pub struct VirtualRootComplex {
-    devs: BTreeMap<Bdf, VirtualPciConfigSpace>,
+    devs: BTreeMap<Bdf, Arc<RwLock<VirtualPciConfigSpace>>>,
     base_to_bdf: BTreeMap<PciConfigAddress, Bdf>,
 }
 
@@ -1115,34 +1116,43 @@ impl VirtualRootComplex {
         &mut self,
         bdf: Bdf,
         dev: VirtualPciConfigSpace,
-    ) -> Option<VirtualPciConfigSpace> {
+    ) -> Option<Arc<RwLock<VirtualPciConfigSpace>>> {
         
         let base = dev.get_base();
         info!("pci insert base {:#x} to bdf {:#?}", base, bdf);
         self.base_to_bdf.insert(base, bdf);
-        self.devs.insert(bdf, dev)
+        let locked_dev = Arc::new(RwLock::new(dev));
+        self.devs.insert(bdf, locked_dev)
     }
 
-    pub fn devs(&mut self) -> &mut BTreeMap<Bdf, VirtualPciConfigSpace> {
+    pub fn devs(&mut self) -> &mut BTreeMap<Bdf, Arc<RwLock<VirtualPciConfigSpace>>> {
         &mut self.devs
     }
 
-    pub fn get(&self, bdf: &Bdf) -> Option<&VirtualPciConfigSpace> {
-        self.devs.get(bdf)
+    pub fn get(&self, bdf: &Bdf) -> Option<Arc<RwLock<VirtualPciConfigSpace>>> {
+        let arc = self.devs.get(bdf)?;
+        arc.clone()
     }
 
-    pub fn get_mut(&mut self, bdf: &Bdf) -> Option<&mut VirtualPciConfigSpace> {
-        self.devs.get_mut(bdf)
-    }
+    // pub fn get_mut(&mut self, bdf: &Bdf) -> Option<&mut VirtualPciConfigSpace> {
+    //     self.devs.get_mut(bdf)
+    // }
 
     /* because the base of device may discontinuous，get device by base is simpler */
     pub fn get_device_by_base(
-        &mut self,
+        &self,
         base: PciConfigAddress,
-    ) -> Option<&mut VirtualPciConfigSpace> {
+    ) -> Option<Arc<RwLock<VirtualPciConfigSpace>>> {
         let bdf = self.base_to_bdf.get(&base).copied()?;
         // info!("get bdf: 0x{:x}-->{}:{}.{}",base,bdf.bus(),bdf.device(),bdf.function());
-        self.devs.get_mut(&bdf)
+        match self.devs.get(&bdf){
+            Some(x)=>{
+                Some(x.clone())
+            }
+            None=>{
+                None
+            }
+        }
     }
 }
 

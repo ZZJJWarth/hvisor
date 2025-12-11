@@ -14,9 +14,10 @@
 // Authors:
 //
 // #![allow(dead_code)]
-use alloc::string::String;
+use alloc::{string::String,sync::Arc};
 use bit_field::BitField;
 use bitflags::bitflags;
+use spin::RwLock;
 use core::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -1191,16 +1192,17 @@ impl PciBridgeHeader {
 impl PciBridgeHeader {}
 
 fn handle_config_space_access(
-    dev: &mut VirtualPciConfigSpace,
+    dev: Arc<RwLock<VirtualPciConfigSpace>>,
     mmio: &mut MMIOAccess,
     offset: PciConfigAddress,
     // gpm: &mut MemorySet<crate::arch::s2pt::Stage2PageTable>,
     zone_id: usize,
 ) -> HvResult {
+    let mut dev_guard = dev.write();
     let size = mmio.size;
     let value = mmio.value;
     let is_write = mmio.is_write;
-    let vbdf = dev.get_vbdf();
+    let vbdf = dev_guard.get_vbdf();
 
     // if vbdf.bus == 0 && vbdf.device == 5 && vbdf.function == 0 {
     //     info!("virt pci standard access, vbdf {:#?}, offset {:#x}, size {:#x}, is_write {:#?}", vbdf, offset, size, is_write);
@@ -1214,7 +1216,7 @@ fn handle_config_space_access(
         return Ok(());
     }
 
-    match dev.access(offset, size) {
+    match dev_guard.access(offset, size) {
         false => {
             info!(
                 "hw vbdf {:#?} reg 0x{:x} try {} {}",
@@ -1228,9 +1230,9 @@ fn handle_config_space_access(
                 }
             );
             if is_write {
-                dev.write_hw(offset, size, value)?;
+                dev_guard.write_hw(offset, size, value)?;
             } else {
-                mmio.value = dev.read_hw(offset, size).unwrap();
+                mmio.value = dev_guard.read_hw(offset, size).unwrap();
             }
         }
         true => {
@@ -1245,9 +1247,9 @@ fn handle_config_space_access(
                     String::new()
                 }
             );
-            match dev.get_dev_type() {
+            match dev_guard.get_dev_type() {
                 super::vpci_dev::VpciDevType::Physical => {
-                    match dev.get_config_type() {
+                    match dev_guard.get_config_type() {
                         HeaderType::Endpoint => {
                             match EndpointField::from(offset as usize, size) {
                                 EndpointField::Bar(slot) => {
@@ -1256,14 +1258,14 @@ fn handle_config_space_access(
                                     /* the write of bar needs to start from dev,
                                      * where the bar variable here is just a copy
                                      */
-                                    let bar = &mut dev.get_bararr()[slot];
+                                    let bar = &mut dev_guard.get_bararr()[slot];
                                     let bar_type = bar.get_type();
                                     if bar_type != PciMemType::default() {
                                         if is_write {
                                             if (value & 0xfffffff0) == 0xfffffff0 {
-                                                dev.set_bar_size_read(slot);
+                                                dev_guard.set_bar_size_read(slot);
                                             } else {
-                                                let _ = dev.write_emu(offset, size, value);
+                                                let _ = dev_guard.write_emu(offset, size, value);
                                                 /* for mem64, Mem64High always write after Mem64Low,
                                                  * so update bar when write Mem64High
                                                  */
@@ -1277,7 +1279,7 @@ fn handle_config_space_access(
                                                             /* last 4bit is flag, not address and need ignore
                                                              * flag will auto add when set_value and set_virtual_value
                                                              */
-                                                            dev.read_emu64(offset - 0x4).unwrap() & !0xf
+                                                            dev_guard.read_emu64(offset - 0x4).unwrap() & !0xf
                                                         } else {
                                                             (value as u64) & !0xf
                                                         }
@@ -1312,9 +1314,9 @@ fn handle_config_space_access(
                                                         old_vaddr, new_vaddr, paddr
                                                     );
         
-                                                    dev.set_bar_virtual_value(slot, new_vaddr);
+                                                    dev_guard.set_bar_virtual_value(slot, new_vaddr);
                                                     if bar_type == PciMemType::Mem64High {
-                                                        dev.set_bar_virtual_value(slot - 1, new_vaddr);
+                                                        dev_guard.set_bar_virtual_value(slot - 1, new_vaddr);
                                                     }
         
                                                     let bar_size = if crate::memory::addr::is_aligned(
@@ -1359,11 +1361,11 @@ fn handle_config_space_access(
                                         } else {
                                             mmio.value = if bar.get_size_read() {
                                                 let r = bar.get_size_with_flag().try_into().unwrap();
-                                                dev.clear_bar_size_read(slot);
+                                                dev_guard.clear_bar_size_read(slot);
                                                 r
                                             } else {
                                                 // bar.get_virtual_value().try_into().unwrap()
-                                                let emu_value = dev.read_emu(offset, size).unwrap() as usize;
+                                                let emu_value = dev_guard.read_emu(offset, size).unwrap() as usize;
                                                 let virtual_value = bar.get_virtual_value() as usize;
                                                 info!("emu value {:#x} virtual_value {:#x}", emu_value, virtual_value);
                                                 emu_value
@@ -1374,18 +1376,18 @@ fn handle_config_space_access(
                                     }
                                 }
                                 EndpointField::ExpansionRomBar => {
-                                    let mut rom = dev.get_rom();
+                                    let mut rom = dev_guard.get_rom();
                                     if is_write {
                                         if (mmio.value & 0xfffff800) == 0xfffff800 {
                                             rom.set_size_read();
                                         } else {
                                             // let old_vaddr = dev.read_emu(offset, size).unwrap() as u64;
-                                            let _ = dev.write_emu(offset, size, value);
+                                            let _ = dev_guard.write_emu(offset, size, value);
                                             // TODO: add gpm change for rom
                                         }
                                     } else {
                                         mmio.value = if rom.get_size_read() {
-                                            dev.read_emu(offset, size).unwrap()
+                                            dev_guard.read_emu(offset, size).unwrap()
                                         } else {
                                             rom.get_size_with_flag().try_into().unwrap()
                                         };
@@ -1399,15 +1401,15 @@ fn handle_config_space_access(
                             warn!("bridge emu rw");
                         }
                         _ => {
-                            warn!("unhanled pci type {:#?}", dev.get_config_type());
+                            warn!("unhanled pci type {:#?}", dev_guard.get_config_type());
                         }
                     }
                 }
                 _ => {
                     if mmio.is_write {
-                        super::vpci_dev::vpci_dev_write_cfg(dev.get_dev_type(), dev, offset, size, value).unwrap();
+                        super::vpci_dev::vpci_dev_write_cfg(dev_guard.get_dev_type(), dev, offset, size, value).unwrap();
                     } else {
-                        mmio.value = super::vpci_dev::vpci_dev_read_cfg(dev.get_dev_type(), dev, offset, size).unwrap() as usize;
+                        mmio.value = super::vpci_dev::vpci_dev_read_cfg(dev_guard.get_dev_type(), dev, offset, size).unwrap() as usize;
                     }
                 }
             }
@@ -1455,7 +1457,7 @@ pub fn mmio_vpci_handler(mmio: &mut MMIOAccess, _base: usize) -> HvResult {
     // info!("base is : 0x{:x}",base);
     if let Some(dev) = vbus.get_device_by_base(base) {
         drop(guard);
-        handle_config_space_access(dev, mmio, offset, zone_id)?;
+        handle_config_space_access(dev, mmio, offset,zone_id)?;
     } else {
         handle_device_not_found(mmio, offset);
     }
@@ -1486,7 +1488,7 @@ pub fn mmio_vpci_handler_dbi(mmio: &mut MMIOAccess, _base: usize) -> HvResult {
         let base = mmio.address as PciConfigAddress - offset + _base as PciConfigAddress;
 
         if let Some(dev) = vbus.get_device_by_base(base) {
-            handle_config_space_access(dev, mmio, offset, gpm, zone_id)?;
+            handle_config_space_access(dev, mmio, offset, zone_id)?;
         } else {
             handle_device_not_found(mmio, offset);
         }

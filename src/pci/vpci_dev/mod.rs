@@ -1,3 +1,6 @@
+use alloc::sync::Arc;
+use spin::RwLock;
+
 use crate::pci::pci_struct::{PciConfigSpace, VirtualPciConfigSpace};
 use crate::pci::PciConfigAddress;
 use crate::error::HvResult;
@@ -24,7 +27,7 @@ pub enum VpciDevType {
 }
 
 pub trait VpciDeviceHandler: Sync + Send {
-    fn read_cfg(&self, dev: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus>;
+    fn read_cfg(&self, dev: Arc<RwLock<VirtualPciConfigSpace>>, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus>;
     fn write_cfg(&self, dev: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus>;
     fn init_config_space(&self) -> PciConfigSpace;
     fn init_bar(&self) -> Bar;
@@ -49,7 +52,7 @@ pub(crate) fn get_handler(dev_type: VpciDevType) -> Option<&'static dyn VpciDevi
 
 pub(super) fn vpci_dev_read_cfg(
     dev_type: VpciDevType, 
-    node: &mut VirtualPciConfigSpace, 
+    node: Arc<RwLock<VirtualPciConfigSpace>>, 
     offset: PciConfigAddress, 
     size: usize
 ) -> HvResult<usize> {
@@ -94,7 +97,7 @@ pub(super) fn vpci_dev_read_cfg(
 
 pub(super) fn vpci_dev_write_cfg(
     dev_type: VpciDevType, 
-    node: &mut VirtualPciConfigSpace, 
+    node: Arc<RwLock< VirtualPciConfigSpace>>, 
     offset: PciConfigAddress, 
     size: usize, 
     value: usize
