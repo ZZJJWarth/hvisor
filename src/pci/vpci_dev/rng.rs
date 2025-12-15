@@ -259,7 +259,7 @@ impl VpciDeviceHandler for VirtioRngHandler {
     }
 
     fn init_config_space(&self) -> PciConfigSpace {
-        let mut space = PciConfigSpace::new();
+        let mut space = PciConfigSpace::new((0x1044,0x1af4));
         // let default_cspace = DEFAULT_CSPACE_U32;
         let default_cspace = COPY_CSPACE_U32;
         let mut offset = 0;
