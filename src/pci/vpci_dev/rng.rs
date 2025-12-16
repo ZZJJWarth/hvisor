@@ -166,7 +166,7 @@ impl VpciDeviceHandler for VirtioRngHandler {
                 if(bar.get_size_read()){
                     return Ok(PciConfigAccessStatus::Done(bar.get_size() as usize))
                 }else{
-                    return Ok(PciConfigAccessStatus::Perform)
+                    return Ok(PciConfigAccessStatus::Done(bar.get_virtual_value() as usize))
                 }
             }
             _ => {
