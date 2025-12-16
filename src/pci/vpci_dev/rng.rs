@@ -166,7 +166,7 @@ impl VpciDeviceHandler for VirtioRngHandler {
                 if(bar.get_size_read()){
                     return Ok(PciConfigAccessStatus::Done(bar.get_size() as usize))
                 }else{
-                    return Ok(PciConfigAccessStatus::Perform)
+                    return Ok(PciConfigAccessStatus::Done(bar.get_virtual_value() as usize))
                 }
             }
             _ => {
@@ -259,7 +259,7 @@ impl VpciDeviceHandler for VirtioRngHandler {
     }
 
     fn init_config_space(&self) -> PciConfigSpace {
-        let mut space = PciConfigSpace::new();
+        let mut space = PciConfigSpace::new((0x1044,0x1af4));
         // let default_cspace = DEFAULT_CSPACE_U32;
         let default_cspace = COPY_CSPACE_U32;
         let mut offset = 0;
