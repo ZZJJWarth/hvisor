@@ -16,11 +16,10 @@
 use core::panic;
 
 use crate::{
-    arch::Stage2PageTable,
     config::*,
     device::virtio_trampoline::mmio_virtio_handler,
     error::HvResult,
-    memory::{GuestPhysAddr, HostPhysAddr, MemFlags, MemoryRegion, MemorySet},
+    memory::{GuestPhysAddr, HostPhysAddr, MemFlags, MemoryRegion},
     zone::Zone,
 };
 

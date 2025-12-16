@@ -15,13 +15,12 @@
 //
 use core::ptr;
 
-use aarch64_cpu::registers::DAIF::A;
 use alloc::{sync::Arc, vec::Vec};
 use spin::{mutex::Mutex, Once, RwLock};
 
 use crate::{
     consts::MAX_ZONE_NUM, device::irqchip::gicv3::gicr::enable_one_lpi, memory::Frame,
-    percpu::this_zone, zone::this_zone_id,
+    percpu::this_zone,
 };
 
 use super::host_gits_base;

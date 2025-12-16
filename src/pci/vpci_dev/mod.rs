@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use spin::RwLock;
 
-use crate::pci::pci_struct::{PciConfigSpace, VirtualPciConfigSpace};
+use crate::pci::pci_struct::{LockedVirtualPciConfigSpace, PciConfigSpace, VirtualPciConfigSpace};
 use crate::pci::PciConfigAddress;
 use crate::error::HvResult;
 use crate::pci::pci_access::Bar;
@@ -27,8 +27,8 @@ pub enum VpciDevType {
 }
 
 pub trait VpciDeviceHandler: Sync + Send {
-    fn read_cfg(&self, dev: Arc<RwLock<VirtualPciConfigSpace>>, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus>;
-    fn write_cfg(&self, dev: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus>;
+    fn read_cfg(&self, dev: LockedVirtualPciConfigSpace , offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus>;
+    fn write_cfg(&self, dev: LockedVirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus>;
     fn init_config_space(&self) -> PciConfigSpace;
     fn init_bar(&self) -> Bar;
 }
@@ -52,10 +52,11 @@ pub(crate) fn get_handler(dev_type: VpciDevType) -> Option<&'static dyn VpciDevi
 
 pub(super) fn vpci_dev_read_cfg(
     dev_type: VpciDevType, 
-    node: Arc<RwLock<VirtualPciConfigSpace>>, 
+    node: LockedVirtualPciConfigSpace, 
     offset: PciConfigAddress, 
     size: usize
 ) -> HvResult<usize> {
+    let node_guard = node.write();
     match dev_type {
         VpciDevType::Physical => {
             warn!("vpci_dev_read_cfg: physical device is not supported");
@@ -63,7 +64,7 @@ pub(super) fn vpci_dev_read_cfg(
         }
         _ => {
             if let Some(handler) = get_handler(dev_type) {
-                match handler.read_cfg(node, offset, size) {
+                match handler.read_cfg(node.clone(), offset, size) {
                     Ok(status) => {
                         match status {
                             PciConfigAccessStatus::Done(value) => {
@@ -72,7 +73,7 @@ pub(super) fn vpci_dev_read_cfg(
                             PciConfigAccessStatus::Perform => {
                                 // warn!("vpci_dev_read_cfg: perform, offset {:#x}, size {:#x}", offset, size);
                                 // warn!("vpci_dev_read_cfg: node {:#?}", node.space);
-                                let r = node.read_emu(offset, size).unwrap();
+                                let r = node_guard.read_emu(offset, size).unwrap();
                                 // warn!("vpci_dev_read_cfg: perform result {:#x}", r);
                                 Ok(r)
                             }
@@ -102,6 +103,7 @@ pub(super) fn vpci_dev_write_cfg(
     size: usize, 
     value: usize
 ) -> HvResult {
+    let mut node_guard = node.write();
     match dev_type {
         VpciDevType::Physical => {
             warn!("vpci_dev_write_cfg: physical device is not supported");
@@ -109,7 +111,7 @@ pub(super) fn vpci_dev_write_cfg(
         }
         _ => {
             if let Some(handler) = get_handler(dev_type) {
-                match handler.write_cfg(node, offset, size, value) {
+                match handler.write_cfg(node.clone(), offset, size, value) {
                     Ok(status) => {
                         match status {
                             PciConfigAccessStatus::Done(_) => {
@@ -117,7 +119,7 @@ pub(super) fn vpci_dev_write_cfg(
                             }
                             PciConfigAccessStatus::Perform => {
                                 warn!("vpci_dev_write_cfg: perform");
-                                node.write_emu(offset, size, value)
+                                node_guard.write_emu(offset, size, value)
                             }
                             PciConfigAccessStatus::Reject => {
                                 warn!("vpci_dev_write_cfg: operation rejected");

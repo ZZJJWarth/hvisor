@@ -15,9 +15,8 @@
 //
 
 use alloc::sync::Arc;
-use bit_field::BitField;
 
-use super::{PciConfigAccessor, PciConfigMmio, PciRegion};
+use super::{PciConfigAccessor, PciConfigMmio };
 
 use crate::{
     error::HvResult,

@@ -1,10 +1,10 @@
+
 use crate::error::HvResult;
-use crate::pci::pci_struct::PciConfigSpace;
+use crate::pci::pci_struct::{LockedVirtualPciConfigSpace, PciConfigSpace};
 use crate::pci::pci_access::{EndpointField, Bar};
 use crate::pci::PciConfigAddress;
 use super::{PciConfigAccessStatus, VpciDeviceHandler};
 // use crate::memory::frame::Frame;
-use crate::pci::pci_struct::VirtualPciConfigSpace;
 use crate::percpu::this_zone;
 use crate::memory::MMIOAccess;
 use crate::pci::pci_access::PciMemType;
@@ -42,15 +42,16 @@ pub(crate) const DEFAULT_CSPACE_U32: [u32; STANDARD_CFG_SIZE / 4] = {
 pub struct StandardHandler;
 
 impl VpciDeviceHandler for StandardHandler {
-    fn read_cfg(&self, dev: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
+    fn read_cfg(&self, dev:  LockedVirtualPciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
         info!("virt pci standard read_cfg, offset {:#x}, size {:#x}", offset, size);
-        let space = dev.get_space_mut();
+        let dev_guard = dev.read();
+        let space = dev_guard.get_space();
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
                 Ok(PciConfigAccessStatus::Done(space.get(EndpointField::ID) as usize))
             }
             EndpointField::Bar(0) => {
-                let bar = dev.get_bararr()[0];
+                let bar = dev_guard.get_bararr()[0];
                 if bar.get_size_read() {
                     let value = bar.get_size_with_flag();
                     Ok(PciConfigAccessStatus::Done(value as usize))
@@ -65,9 +66,10 @@ impl VpciDeviceHandler for StandardHandler {
         }
     }
 
-    fn write_cfg(&self, dev: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
+    fn write_cfg(&self, dev: LockedVirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
         info!("virt pci standard write_cfg, offset {:#x}, size {:#x}, value {:#x}", offset, size, value);
-        let mut space = dev.get_space_mut();
+        let mut dev_guard = dev.write();
+        let mut space = dev_guard.get_space_mut();
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
                 Ok(PciConfigAccessStatus::Reject)
@@ -79,12 +81,12 @@ impl VpciDeviceHandler for StandardHandler {
             EndpointField::Bar(0) => {
                 let slot = 0;
                 if value == 0xFFFF_FFFF {
-                    dev.set_bar_size_read(slot);
+                    dev_guard.set_bar_size_read(slot);
                 } else {
-                    let size = dev.get_bararr()[slot].get_size();
+                    let size = dev_guard.get_bararr()[slot].get_size();
                     let zone = this_zone();
-                    // let mut guard = zone.write();
-                    // guard.mmio_region_register(value as usize, size as usize, mmio_vdev_standard_handler, value);
+                    let mut guard = zone.write();
+                    guard.mmio_region_register(value as usize, size as usize, mmio_vdev_standard_handler, value);
                 }
 
                 Ok(PciConfigAccessStatus::Done(value))

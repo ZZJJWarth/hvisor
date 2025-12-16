@@ -18,7 +18,7 @@ use alloc::sync::Arc;
 use super::{gicd::GICD_LOCK, is_spi};
 use crate::platform::BOARD_MPIDR_MAPPINGS;
 use crate::{
-    arch::zone::{GicConfig, Gicv2Config, Gicv3Config, HvArchZoneConfig},
+    arch::zone::{GicConfig, HvArchZoneConfig},
     config::{BitmapWord, CONFIG_INTERRUPTS_BITMAP_BITS_PER_WORD, CONFIG_MAX_INTERRUPTS},
     consts::MAX_CPU_NUM,
     device::irqchip::gicv3::{

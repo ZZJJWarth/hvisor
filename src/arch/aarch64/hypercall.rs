@@ -16,7 +16,7 @@
 
 use crate::arch::cpu::this_cpu_id;
 use crate::arch::ivc::{IvcInfo, IVC_INFOS};
-use crate::config::{HvZoneConfig, CONFIG_MAGIC_VERSION};
+use crate::config::CONFIG_MAGIC_VERSION;
 use crate::device::virtio_trampoline::MAX_DEVS;
 use crate::hypercall::HyperCall;
 use crate::hypercall::HyperCallResult;

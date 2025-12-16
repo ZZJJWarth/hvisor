@@ -18,9 +18,9 @@ use spin::{Lazy, Mutex};
 
 use crate::{
     arch::iommu::iommu_add_device,
-    config::{HvPciConfig, HvPciDevConfig, CONFIG_MAX_PCI_DEV, CONFIG_PCI_BUS_MAXNUM},
+    config::{CONFIG_MAX_PCI_DEV, CONFIG_PCI_BUS_MAXNUM, HvPciConfig, HvPciDevConfig},
     error::HvResult,
-    pci::pci_struct::{Bdf, VirtualPciConfigSpace}, 
+    pci::pci_struct::{Bdf, LockedVirtualPciConfigSpace, VirtualPciConfigSpace}, 
     zone::Zone,
 };
 
@@ -32,7 +32,7 @@ use crate::pci::vpci_dev::{VpciDevType, get_handler};
     feature = "dwc_pcie",
     feature = "loongarch64_pcie"
 ))]
-use crate::pci::{mem_alloc::BaseAllocator, pci_struct::RootComplex, pci_access::mmio_vpci_handler};
+use crate::pci::{mem_alloc::BaseAllocator, pci_struct::RootComplex, };
 
 #[cfg(feature = "dwc_pcie")]
 use crate::{memory::mmio_generic_handler, pci::pci_access::mmio_vpci_handler_dbi, platform};
@@ -40,7 +40,7 @@ use crate::{memory::mmio_generic_handler, pci::pci_access::mmio_vpci_handler_dbi
 #[cfg(feature = "loongarch64_pcie")]
 use crate::pci::pci_access::mmio_vpci_direct_handler;
 
-pub static GLOBAL_PCIE_LIST: Lazy<Mutex<BTreeMap<Bdf, VirtualPciConfigSpace>>> = Lazy::new(|| {
+pub static GLOBAL_PCIE_LIST: Lazy<Mutex<BTreeMap<Bdf, LockedVirtualPciConfigSpace>>> = Lazy::new(|| {
     let m = BTreeMap::new();
     Mutex::new(m)
 });
@@ -137,8 +137,11 @@ pub fn hvisor_pci_init(pci_config: &[HvPciConfig]) -> HvResult {
         let e = rootcomplex.enumerate(Some(range), allocator_opt);
         info!("begin enumerate {:#?}", e);
         for node in e {
+            use alloc::sync::Arc;
+            use spin::rwlock::RwLock;
+
             info!("node {:#?}", node);
-            GLOBAL_PCIE_LIST.lock().insert(node.get_bdf(), node);
+            GLOBAL_PCIE_LIST.lock().insert(node.get_bdf(), Arc::new(RwLock::new(node)));
         }
     }
     info!("hvisor pci init done \n{:#?}", GLOBAL_PCIE_LIST);
@@ -172,15 +175,23 @@ impl Zone {
                 };
                 iommu_add_device(zone_id, dev_config.bdf as _, iommu_pt_addr);
             }
-            if let Some(dev) = guard.get(&bdf) {
-                if bdf.is_host_bridge(dev.get_host_bdf().bus()) {
-                    let mut vdev = dev.clone();
+            info!("into insert");
+            if let Some(dev) = guard.get(&bdf).cloned() {
+                let dev_guard = dev.read();
+                if bdf.is_host_bridge(dev_guard.get_host_bdf().bus()) {
+                    info!("into if");
+                    let mut vdev = dev_guard.clone();
+                    drop(dev_guard);
                     vdev.set_vbdf(vbdf);
                     self.vpci_bus.insert(vbdf, vdev);
                 } else {
-                    let mut vdev = guard.remove(&bdf).unwrap();
-                    vdev.set_vbdf(vbdf);
-                    self.vpci_bus.insert(vbdf, vdev);
+                    info!("into else");
+                    drop(dev_guard);
+                    let vdev = guard.remove(&bdf).unwrap();
+                    let mut vdev_guard = vdev.write();
+                    vdev_guard.set_vbdf(vbdf);
+                    drop(vdev_guard);
+                    self.vpci_bus.insert_arc(vbdf, vdev.clone());
                 }
             } else {
                 // warn!("can not find dev {:#?}", bdf);
@@ -207,6 +218,7 @@ impl Zone {
                 }
                 }
             }
+
             i += 1;
         }
         info!("vpci bus init done\n {:#?}", self.vpci_bus);

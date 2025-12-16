@@ -15,9 +15,8 @@
 //
 #![allow(dead_code)]
 use crate::{
-    arch::mm::new_s2_memory_set,
     consts::{MAX_ZONE_NUM, PAGE_SIZE},
-    memory::{Frame, GuestPhysAddr, MemFlags, MemoryRegion, MemorySet, PhysAddr},
+    memory::{Frame,PhysAddr},
 };
 use aarch64_cpu::registers::{Readable, Writeable};
 use alloc::vec::Vec;
@@ -27,7 +26,6 @@ use tock_registers::{
     registers::{ReadOnly, ReadWrite},
 };
 
-use super::Stage2PageTable;
 
 #[allow(dead_code)]
 const SMMU_BASE_ADDR: PhysAddr = 0x09050000;
@@ -498,6 +496,7 @@ impl Smmuv3 {
 
     // s1 bypass and s2 translate
     fn write_ste(&mut self, sid: usize, vmid: usize, root_pt: usize) {
+        // info!("write_ste ");
         self.sync_ste(sid);
 
         assert!(vmid < MAX_ZONE_NUM, "Invalid zone id!");
