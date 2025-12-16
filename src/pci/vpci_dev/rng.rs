@@ -1,7 +1,7 @@
 use crate::pci::vpci_dev::standard::mmio_vdev_standard_handler;
 use crate::percpu::this_zone;
 use crate::{error::HvResult, pci::pci_struct::VirtualPciConfigSpace};
-use crate::pci::pci_struct::PciConfigSpace;
+use crate::pci::pci_struct::{ArcRwLockVirtualPciConfigSpace, PciConfigSpace};
 use crate::pci::pci_access::EndpointField;
 use crate::pci::PciConfigAddress;
 use super::{PciConfigAccessStatus, VpciDeviceHandler};
@@ -151,8 +151,9 @@ impl VpciDeviceHandler for VirtioRngHandler {
         bar
     }
 
-    fn read_cfg(&self, _space: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
+    fn read_cfg(&self, _space: ArcRwLockVirtualPciConfigSpace, offset: PciConfigAddress, size: usize) -> HvResult<PciConfigAccessStatus> {
         // info!("virt pci standard read_cfg, offset {:#x}, size {:#x}", offset, size);
+        let mut space_guard = _space.write();
         match EndpointField::from(offset as usize, size) {
             // EndpointField::ID => {
             //     Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::ID) as usize))
@@ -161,7 +162,7 @@ impl VpciDeviceHandler for VirtioRngHandler {
             //     Ok(PciConfigAccessStatus::Done(_space.get(EndpointField::CapabilityPointer) as usize))
             // }
             EndpointField::Bar(n)=>{
-                let bar = _space.get_bararr()[n];
+                let bar = space_guard.get_bararr()[n];
                 // return Ok(PciConfigAccessStatus::Done(0x0));
                 if(bar.get_size_read()){
                     return Ok(PciConfigAccessStatus::Done(bar.get_size() as usize))
@@ -175,8 +176,9 @@ impl VpciDeviceHandler for VirtioRngHandler {
         }
     }
 
-    fn write_cfg(&self, space: &mut VirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
+    fn write_cfg(&self, space: ArcRwLockVirtualPciConfigSpace, offset: PciConfigAddress, size: usize, value: usize) -> HvResult<PciConfigAccessStatus> {
         // info!("virt pci standard write_cfg, offset {:#x}, size {:#x}, value {:#x}", offset, size, value);
+        let mut space_guard = space.write();
         match EndpointField::from(offset as usize, size) {
             EndpointField::ID => {
                 Ok(PciConfigAccessStatus::Reject)
@@ -235,14 +237,14 @@ impl VpciDeviceHandler for VirtioRngHandler {
             // }
             EndpointField::Bar(n)=>{
                 if(value == 0xffff_ffff){
-                    space.set_bar_size_read(n);
+                    space_guard.set_bar_size_read(n);
                     Ok(PciConfigAccessStatus::Done(0x0))
                 }else if value == 0x0 {
                     Ok(PciConfigAccessStatus::Done(0x0))   
                 }
                 else{
                     
-                    let a = space.get_bararr()[n];
+                    let a = space_guard.get_bararr()[n];
                     let mut zone = this_zone();
                     let mut guard = zone.write();
                     guard.mmio_region_register(value , a.get_size() as usize, rng_mmio_handler, value);
