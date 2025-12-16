@@ -1360,7 +1360,6 @@ fn handle_config_space_access(
                                                         bar_size as _,
                                                         MemFlags::READ | MemFlags::WRITE,
                                                     ))?;
-
                                                     /* after update gpm, mem barrier is needed
                                                      */
                                                     #[cfg(target_arch = "aarch64")]

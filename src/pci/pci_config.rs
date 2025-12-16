@@ -195,6 +195,8 @@ impl Zone {
                     }
                     _ => {
                         if let Some(_handler) = get_handler(dev_type) {
+                            use crate::pci::pci_struct::VirtualPciConfigSpace;
+
                             let base = _ecam_base 
                                             + ((bdf.bus() as u64) << 20)
                                             + ((bdf.device() as u64) << 15)

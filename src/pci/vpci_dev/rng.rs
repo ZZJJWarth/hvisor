@@ -247,8 +247,10 @@ impl VpciDeviceHandler for VirtioRngHandler {
                     let a = space_guard.get_bararr()[n];
                     let mut zone = this_zone();
                     let mut guard = zone.write();
+                    // warn!("rng write mmio region");
                     guard.mmio_region_register(value , a.get_size() as usize, rng_mmio_handler, value);
                     drop(guard);
+                    // warn!("done");
                     space.clear_bar_size_read(n);
                     
                     Ok(PciConfigAccessStatus::Done(0x0))
